@@ -1,0 +1,76 @@
+public void executeReportBySchedule() {
+    log.info("Executing reports by schedule.");
+
+    Long scheduleEndTime =
+            DateTimeUtils.addMinutes(reportingConfig.getReportScheduleExecutionWindow());
+
+    List<ReportScheduleManagement> schedules =
+            findByStatusAndNextScheduleExecutionTime(scheduleEndTime);
+
+    List<ReportManagement> reportManagementList = new java.util.ArrayList<>();
+
+    for (ReportScheduleManagement schedule : schedules) {
+
+        ReportingResponse<Map<String, String>> response =
+                merchantServiceClient.validateActiveMIdCurrency(schedule.getMId());
+
+        boolean validCurrency = response.getStatus() == 1
+                && response.getData() != null
+                && response.getData().stream().anyMatch(currency ->
+                    schedule.getCurrencyCode().equalsIgnoreCase(currency.get("MID_CURRENCY"))
+                    && "ACTIVE".equalsIgnoreCase(currency.get("STATUS"))
+                );
+
+        if (!validCurrency) {
+            schedule.setStatus(ReportScheduledStatus.CANCELLED);
+            schedule.setRemarks(
+                    "Currency is not active or not supported for MID"
+            );
+            continue;
+        }
+
+        schedule.setLastScheduleExecutionTime(DateTimeUtils.getCurrentTimeInMills());
+
+        schedule.setNextScheduleExecutionTime(
+                DateTimeUtils.calculateNextExecutionTime(
+                        schedule.getFrequency(),
+                        schedule.getScheduleExecutionTime(),
+                        schedule.getScheduleExecutionDate()
+                )
+        );
+
+        Pair<LocalDate, LocalDate> dateRange =
+                calculateReportDateRange(
+                        schedule.getReportDuration(),
+                        LocalDate.now()
+                );
+
+        ReportManagement reportManagement = ReportManagement.builder()
+                .reportId(schedule.getReportId())
+                .mId(schedule.getMId())
+                .currencyCode(schedule.getCurrencyCode())
+                .format(schedule.getFormat())
+                .scheduledId(schedule.getId())
+                .durationFromDate(
+                        dateRange.getLeft()
+                                .atStartOfDay(ZoneId.systemDefault())
+                                .toInstant()
+                                .toEpochMilli()
+                )
+                .durationToDate(
+                        dateRange.getRight()
+                                .atStartOfDay(ZoneId.systemDefault())
+                                .toInstant()
+                                .toEpochMilli() - ONE
+                )
+                .status(ReportStatus.TO_BE_GENERATE)
+                .build();
+
+        reportManagementList.add(reportManagement);
+    }
+
+    reportScheduleManagementRepository.saveAll(schedules);
+    reportManagementDao.saveAll(reportManagementList);
+
+    log.info("Reports executed and saved successfully.");
+}
