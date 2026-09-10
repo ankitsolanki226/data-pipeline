@@ -1,0 +1,33 @@
+package com.epay.reporting.controller;
+
+import com.epay.reporting.service.ReportScheduleManagementService;
+
+import lombok.RequiredArgsConstructor;
+
+import org.springframework.web.bind.annotation.PostMapping;
+
+import org.springframework.web.bind.annotation.RequestMapping;
+
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+
+@RequiredArgsConstructor
+
+@RequestMapping("/dummy/report-scheduler")
+
+public class ReportScheduleDummyController {
+
+    private final ReportScheduleManagementService service;
+
+    @PostMapping("/execute")
+
+    public String execute() {
+
+        service.executeReportBySchedule();
+
+        return "Scheduler executed successfully";
+
+    }
+
+}
